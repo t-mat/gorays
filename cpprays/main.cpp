@@ -5,9 +5,9 @@
 #include <random>
 #include <thread>
 #include <vector>
-#include <xmmintrin.h>
+#include <immintrin.h>
 
-typedef float v4f __attribute__ ((vector_size (16)));
+typedef float v8f __attribute__ ((vector_size (32)));
 
 //Define a vector class with constructor and operator: 'v'
 struct vector {
@@ -21,23 +21,23 @@ struct vector {
   inline vector operator!() const {return *this*(1/sqrtf(*this%*this));} // Used later for normalizing the vector
 };
 
-struct vector4 {
-  v4f x,y,z;  // Vector has 4 * three float attributes.
-  inline vector4 operator+(vector4 r) const {return vector4(x+r.x,y+r.y,z+r.z);} //Vector add
-  inline vector4 operator*(v4f r) const {return vector4(x*r,y*r,z*r);}       //Vector scaling
-  inline vector4 operator*(float r) const {v4f v=_mm_set1_ps(r); return vector4(x*v,y*v,z*v);}       //Vector scaling
-  inline v4f operator%(vector4 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
-  vector4(){}                                  //Empty constructor
-  inline vector4 operator^(vector4 r) const {return vector4(y*r.z-z*r.y,z*r.x-x*r.z,x*r.y-y*r.x);} //Cross-product
-  inline vector4(v4f a, v4f b,v4f c){x=a;y=b;z=c;}            //Constructor
-  inline vector4(float a, float b, float c){x=_mm_set1_ps(a);y=_mm_set1_ps(b);z=_mm_set1_ps(c);}            //Constructor
-  inline vector4(vector* vec) {
-    x = _mm_set_ps(vec[3].x, vec[2].x, vec[1].x, vec[0].x);
-    y = _mm_set_ps(vec[3].y, vec[2].y, vec[1].y, vec[0].y);
-    z = _mm_set_ps(vec[3].z, vec[2].z, vec[1].z, vec[0].z);
+struct vector8 {
+  v8f x,y,z;  // Vector has 4 * three float attributes.
+  inline vector8 operator+(vector8 r) const {return vector8(x+r.x,y+r.y,z+r.z);} //Vector add
+  inline vector8 operator*(v8f r) const {return vector8(x*r,y*r,z*r);}       //Vector scaling
+  inline vector8 operator*(float r) const {v8f v=_mm256_set1_ps(r); return vector8(x*v,y*v,z*v);}       //Vector scaling
+  inline v8f operator%(vector8 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
+  vector8(){}                                  //Empty constructor
+  inline vector8 operator^(vector8 r) const {return vector8(y*r.z-z*r.y,z*r.x-x*r.z,x*r.y-y*r.x);} //Cross-product
+  inline vector8(v8f a, v8f b,v8f c){x=a;y=b;z=c;}            //Constructor
+  inline vector8(float a, float b, float c){x=_mm256_set1_ps(a);y=_mm256_set1_ps(b);z=_mm256_set1_ps(c);}            //Constructor
+  inline vector8(vector* vec) {
+    x = _mm256_set_ps(vec[7].x, vec[6].x, vec[5].x, vec[4].x, vec[3].x, vec[2].x, vec[1].x, vec[0].x);
+    y = _mm256_set_ps(vec[7].y, vec[6].y, vec[5].y, vec[4].y, vec[3].y, vec[2].y, vec[1].y, vec[0].y);
+    z = _mm256_set_ps(vec[7].z, vec[6].z, vec[5].z, vec[4].z, vec[3].z, vec[2].z, vec[1].z, vec[0].z);
   }
-  inline vector4(vector vec) { x = _mm_set1_ps(vec.x); y = _mm_set1_ps(vec.y); z = _mm_set1_ps(vec.z); }
-  inline vector4 operator!() const {return *this*(_mm_rsqrt_ps(*this%*this));} // Used later for normalizing the vector
+  inline vector8(vector vec) { x = _mm256_set1_ps(vec.x); y = _mm256_set1_ps(vec.y); z = _mm256_set1_ps(vec.z); }
+  inline vector8 operator!() const {return *this*(_mm256_rsqrt_ps(*this%*this));} // Used later for normalizing the vector
 };
 
 const char *art[] = {
@@ -53,7 +53,8 @@ const char *art[] = {
 };
 
 std::vector<vector> objects;
-std::vector<vector4> objects4;
+std::vector<vector8> objects8;
+
 void F() {
   int nr = sizeof(art) / sizeof(char *),
   nc = strlen(art[0]);
@@ -64,8 +65,8 @@ void F() {
       }
     }
   }
-  for(unsigned int i = 0; i < objects.size(); i++)
-    objects4.push_back(vector4(&objects[i*4]));
+  for (size_t i = 0; i < objects.size(); i+= 8)
+    objects8.push_back(vector8(objects.data() + i));
 }
 
 float R(unsigned int& seed) {
@@ -81,7 +82,7 @@ float R(unsigned int& seed) {
 // Return 0 if no hit was found but ray goes upward
 // Return 1 if no hit was found but ray goes downward
 int T(const vector& o,const vector& d,float& t,vector& n) {
-  const int objects_size = (objects.size() + 3) / 4;
+  const int objects_size = (objects.size() + 7) / 8;
   t=1e9;
   int m=0, idx=-1;
   float p=-o.z/d.z;
@@ -89,28 +90,26 @@ int T(const vector& o,const vector& d,float& t,vector& n) {
   if(.01f<p)
     t=p,n=vector(0,0,1),m=1;
 
-  vector4 o4 = vector4(o) +vector4(0,3,-4);
-  vector4 d4(d);
+  vector8 o4 = vector8(o) +vector8(0,3,-4);
+  vector8 d4(d);
   for(int i = 0; i < objects_size; i++) {
     // There is a sphere but does the ray hits it ?
-    vector4 p = o4 + objects4[i];
-    v4f b = p % d4;
-    v4f c = p % p - _mm_set1_ps(1);
-    v4f b2 = b*b;
-    int mask = _mm_movemask_ps(_mm_cmpgt_ps(b2, c));
+    vector8 p = o4 + objects8[i];
+    v8f b = p % d4;
+    v8f c = p % p - _mm256_set1_ps(1);
+    v8f b2 = b*b;
+    int mask = _mm256_movemask_ps(_mm256_cmp_ps(b2, c, _CMP_GT_OQ));
     if (!mask) // early bailout if nothing hit
       continue;
-    v4f q = b2 - c;
-    v4f s_ = -b - _mm_sqrt_ps(q);
-
+    v8f q = b2 - c;
+    v8f s_ = -b - _mm256_sqrt_ps(q);
     // Does the ray hit the sphere ?
-    for(int j = 0; j < 4; j++) {
+
+    for(int j = 0; j < 8; j++) {
       if(mask & (1 << j)) {
         float s = ((float*)&s_)[j];
-        // So far this is the minimum distance, save it. And also
-        // compute the bouncing ray vector into 'n'
         if(s < t && s > .01f) {
-          idx = i*4+j;
+          idx = i*8+j;
           t = s;
         }
       }
