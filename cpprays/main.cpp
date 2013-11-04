@@ -9,11 +9,15 @@
 #include <map>
 #include <numeric>
 
-#if defined(RAYS_CPP_SSE)
+#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 #include <smmintrin.h>
 #endif
 
-#if defined(RAYS_CPP_SSE)
+#if defined(RAYS_CPP_AVX)
+#include <immintrin.h>
+#endif
+
+#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 
 class vector {
 public:
@@ -85,10 +89,103 @@ private:
 
 #endif
 
+
+#if defined(RAYS_CPP_AVX)
+
+typedef __m256 v8f;
+typedef int v8bool;
+
+v8f make_v8f(float f) {
+  return _mm256_set1_ps(f);
+}
+
+v8f make_v8f(float f0, float f1, float f2, float f3, float f4, float f5, float f6, float f7) {
+  return _mm256_set_ps(f0, f1, f2, f3, f4, f5, f6, f7);
+}
+
+float get(v8f v, int index) {
+#if defined(_MSC_VER)
+  return v.m256_f32[index];
+#else
+  return reinterpret_cast<const float*>(&v)[index];
+#endif
+}
+
+v8f sqrt(v8f v) {
+  return _mm256_sqrt_ps(v);
+}
+
+v8f rsqrt(v8f v) {
+  return _mm256_rsqrt_ps(v);
+}
+
+v8bool compare_gt(v8f lhs, v8f rhs) {
+  return _mm256_movemask_ps(_mm256_cmp_ps(lhs, rhs, _CMP_GT_OQ));
+}
+
+bool is_any(v8bool b) {
+  return 0 != b;
+}
+
+bool is_true(v8bool b, int index) {
+  return 0 != (b & (1 << index));
+}
+
+#if defined(_MSC_VER)
+v8f operator+(__m256 lhs, __m256 rhs) {
+  return _mm256_add_ps(lhs, rhs);
+}
+
+v8f operator-(v8f lhs, v8f rhs) {
+  return _mm256_sub_ps(lhs, rhs);
+}
+
+v8f operator*(v8f lhs, v8f rhs) {
+  return _mm256_mul_ps(lhs, rhs);
+}
+
+v8f operator-(v8f v) {
+  // Flipping sign on packed SSE floats
+  // http://stackoverflow.com/questions/3361132/flipping-sign-on-packed-sse-floats
+  // http://stackoverflow.com/a/3528787/2132223
+  return _mm256_xor_ps(v, _mm256_set1_ps(-0.f));
+}
+#endif
+
+
+struct vector8 {
+  v8f x,y,z;  // Vector has 4 * three float attributes.
+  inline vector8 operator+(vector8 r) const {return vector8(x+r.x,y+r.y,z+r.z);} //Vector add
+  inline vector8 operator*(v8f r) const {return vector8(x*r,y*r,z*r);}       //Vector scaling
+  inline vector8 operator*(float r) const {v8f v=make_v8f(r); return vector8(x*v,y*v,z*v);}       //Vector scaling
+  inline v8f operator%(vector8 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
+  inline vector8 operator^(vector8 r) const {return vector8(y*r.z-z*r.y,z*r.x-x*r.z,x*r.y-y*r.x);} //Cross-product
+  vector8(){}                                  //Empty constructor
+  inline vector8(v8f a, v8f b,v8f c){x=a;y=b;z=c;}            //Constructor
+  inline vector8(float a, float b, float c){x=make_v8f(a);y=make_v8f(b);z=make_v8f(c);}            //Constructor
+  inline vector8 operator!() const {return *this*(rsqrt(*this%*this));} // Used later for normalizing the vector
+  vector8(const vector* vec) {
+    x = make_v8f(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x());
+    y = make_v8f(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y());
+    z = make_v8f(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z());
+  }
+  vector8(const vector vec) {
+    x = make_v8f(vec.x());
+    y = make_v8f(vec.y());
+    z = make_v8f(vec.z());
+  }
+};
+
+#endif
+
+
 typedef std::chrono::high_resolution_clock Clock;
 typedef std::chrono::duration<double> ClockSec;
 typedef std::vector<vector> Objects;
 typedef std::vector<std::string> Art;
+#if defined(RAYS_CPP_AVX)
+typedef std::vector<vector8> Objects8;
+#endif
 
 struct Result {
   Result(size_t times)
@@ -214,6 +311,41 @@ Objects makeObjects(const Art& art) {
   return o;
 }
 
+#if defined(RAYS_CPP_AVX)
+Objects8 makeObjects8(const Objects& objectsSrc) {
+  const size_t OBJ_ALIGN = 8;
+
+  const auto objectsAlign8 = [&]() {
+    Objects o = objectsSrc;
+    while(o.size() % OBJ_ALIGN != 0) {
+      o.push_back(o.back());
+    }
+    return o;
+  }();
+
+  Objects8 o;
+  for(size_t i = 0; i < objectsAlign8.size(); i += OBJ_ALIGN) {
+    o.push_back(vector8(objectsAlign8.data() + i));
+  }
+  return o;
+}
+#endif
+
+class Scene {
+public:
+  Scene(const Art& art)
+    : objects(makeObjects(art))
+#if defined(RAYS_CPP_AVX)
+    , objects8(makeObjects8(objects))
+#endif
+    {}
+
+  Objects objects;
+#if defined(RAYS_CPP_AVX)
+  Objects8 objects8;
+#endif
+};
+
 float rnd(unsigned int& seed) {
   seed += seed;
   seed ^= 1;
@@ -242,8 +374,67 @@ struct TracerResult {
   float t;
 };
 
-TracerResult tracer(const Objects& objects, vector o, vector d) {
+TracerResult tracer(const Scene& scene, vector o, vector d) {
   auto tr = TracerResult { vector(0.0f, 0.0f, 1.0f), Status::kMissUpward, 1e9f };
+
+#if defined(RAYS_CPP_AVX)
+  {
+    const int nVector = 8;
+    auto t = tr.t;
+    auto m = (int) tr.m;
+    auto n = tr.n;
+    const int objects_size = static_cast<int>(scene.objects.size() + nVector - 1) / nVector;
+    int idx=-1;
+    float p=-o.z()/d.z();
+
+    if(.01f<p) {
+      t=p,n=vector(0,0,1),m=1;
+    }
+
+    vector8 o4 = vector8(o);
+    vector8 d4(d);
+    for(int i = 0; i < objects_size; i++) {
+      // There is a sphere but does the ray hits it ?
+      vector8 p = o4 + scene.objects8[i];
+      v8f b = p % d4;
+      v8f c = p % p - make_v8f(1.0f);
+      v8f b2 = b*b;
+      const auto mask = compare_gt(b2, c);
+      if (!is_any(mask)) { // early bailout if nothing hit
+        continue;
+      }
+      v8f q = b2 - c;
+      v8f s_ = -b - sqrt(q);
+      // Does the ray hit the sphere ?
+
+      for(int j = 0; j < nVector; j++) {
+        if(is_true(mask, j)) {
+          float s = get(s_, j);
+          if(s < t && s > .01f) {
+            idx = i*nVector+j;
+            t = s;
+          }
+        }
+      }
+    }
+
+    if (idx != -1) {
+      vector o2 = vector(o);
+      vector p = o2 + scene.objects[idx];
+      m = 2;
+      n=!(p + d * t);
+    }
+
+    tr.n = n;
+    tr.t = t;
+    switch(m) {
+      default:
+      case 0: tr.m = Status::kMissUpward; break;
+      case 1: tr.m = Status::kMissDownward; break;
+      case 2: tr.m = Status::kHit; break;
+    }
+  }
+#else
   const auto p = -o.z() / d.z();
 
   if(.01f < p) {
@@ -252,7 +443,7 @@ TracerResult tracer(const Objects& objects, vector o, vector d) {
     tr.m = Status::kMissDownward;
   }
 
-  for (const auto& obj : objects) {
+  for (const auto& obj : scene.objects) {
     const auto p = o + obj;
     const auto b = p % d;
     const auto c = p % p - 1.0f;
@@ -269,13 +460,13 @@ TracerResult tracer(const Objects& objects, vector o, vector d) {
       }
     }
   }
-
+#endif
   return tr;
 }
 
-vector sampler(const Objects& objects, vector o,vector d, unsigned int& seed) {
+vector sampler(const Scene& scene, vector o,vector d, unsigned int& seed) {
   //Search for an intersection ray Vs World.
-  const auto tr = tracer(objects, o, d);
+  const auto tr = tracer(scene, o, d);
 
   if(tr.m == Status::kMissUpward) {
     const auto p = 1.f - d.z();
@@ -290,7 +481,7 @@ vector sampler(const Objects& objects, vector o,vector d, unsigned int& seed) {
   if(b < 0.0f) {
     b = 0.0f;
   } else {
-    const auto tr2 = tracer(objects, h, l);
+    const auto tr2 = tracer(scene, h, l);
     if(tr2.m != Status::kMissUpward) {
       b = 0.0f;
     }
@@ -306,10 +497,10 @@ vector sampler(const Objects& objects, vector o,vector d, unsigned int& seed) {
 
   const auto r = d+on*(on%d*-2.0f);               // r = The half-vector
   const auto p = pow(l % r * (b > 0.0f), 99.0f);
-  return vector(p,p,p)+sampler(objects, h,r,seed)*.5f;
+  return vector(p,p,p)+sampler(scene, h,r,seed)*.5f;
 }
 
-void worker(unsigned char* dst, int imageSize, const Objects& objects, unsigned int seed, int offset, int jump) {
+void worker(unsigned char* dst, int imageSize, const Scene& scene, unsigned int seed, int offset, int jump) {
   const auto g = !vector(-3.1f, -16.f, 1.9f);
   const auto a = !(vector(0.0f, 0.0f, 1.0f)^g) * .002f;
   const auto b = !(g^a)*.002f;
@@ -334,7 +525,7 @@ void worker(unsigned char* dst, int imageSize, const Objects& objects, unsigned 
         const auto jc = js;
         const auto dir = !(t*jt + a*ja + b*jb + c*jc);
 
-        const auto s = sampler(objects, orig, dir, seed);
+        const auto s = sampler(scene, orig, dir, seed);
         p = s * 3.5f + p;
       }
 
@@ -364,7 +555,7 @@ int main(int argc, char **argv) {
   }
 
   const auto art = readArt(artFile);
-  const auto objects = makeObjects(art);
+  const auto scene = Scene { art };
   auto result = Result { static_cast<size_t>(cl.times) };
 
   const auto imageSize = static_cast<int>(sqrt(cl.megaPixels * 1000.0 * 1000.0));
@@ -376,7 +567,7 @@ int main(int argc, char **argv) {
     auto rgen = std::mt19937 {};
     auto threads = std::vector<std::thread>{};
     for(auto i = 0; i < cl.procs; ++i) {
-      threads.emplace_back(worker, bytes.data(), imageSize, objects, rgen(), i, cl.procs);
+      threads.emplace_back(worker, bytes.data(), imageSize, scene, rgen(), i, cl.procs);
     }
     for(auto& t : threads) {
       t.join();
