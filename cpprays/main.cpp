@@ -90,10 +90,119 @@ private:
 #endif
 
 
+#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+typedef int vbool;
+
+bool is_any(vbool b) {
+  return 0 != b;
+}
+
+bool is_true(vbool b, int index) {
+  return 0 != (b & (1 << index));
+}
+#endif
+
+
+#if defined(RAYS_CPP_SSE)
+typedef __m128 v4f;
+
+v4f make_v4f(float f) {
+  return _mm_set1_ps(f);
+}
+
+v4f make_v4f(float f0, float f1, float f2, float f3) {
+  return _mm_set_ps(f0, f1, f2, f3);
+}
+
+float get(v4f v, int index) {
+#if defined(_MSC_VER)
+  return v.m128_f32[index];
+#else
+  return reinterpret_cast<const float*>(&v)[index];
+#endif
+}
+
+v4f sqrt(v4f v) {
+  return _mm_sqrt_ps(v);
+}
+
+v4f rsqrt(v4f v) {
+  return _mm_rsqrt_ps(v);
+}
+
+vbool compare_gt(v4f lhs, v4f rhs) {
+  return _mm_movemask_ps(_mm_cmp_ps(lhs, rhs, _CMP_GT_OQ));
+}
+
+#if defined(_MSC_VER)
+v4f operator+(v4f lhs, v4f rhs) {
+  return _mm_add_ps(lhs, rhs);
+}
+
+v4f operator-(v4f lhs, v4f rhs) {
+  return _mm_sub_ps(lhs, rhs);
+}
+
+v4f operator*(v4f lhs, v4f rhs) {
+  return _mm_mul_ps(lhs, rhs);
+}
+
+v4f operator-(v4f v) {
+  // Flipping sign on packed SSE floats
+  // http://stackoverflow.com/questions/3361132/flipping-sign-on-packed-sse-floats
+  // http://stackoverflow.com/a/3528787/2132223
+  return _mm_xor_ps(v, _mm_set1_ps(-0.f));
+}
+#endif
+
+v4f operator-(v4f lhs, float rhs) {
+  return lhs - make_v4f(rhs);
+}
+
+
+struct vector4 {
+  enum { nVector = 4 };
+
+  v4f x,y,z;  // Vector has 4 * three float attributes.
+  inline vector4 operator+(vector4 r) const {return vector4(x+r.x,y+r.y,z+r.z);} //Vector add
+  inline vector4 operator*(v4f r) const {return vector4(x*r,y*r,z*r);}       //Vector scaling
+  inline vector4 operator*(float r) const {v4f v=make_v4f(r); return vector4(x*v,y*v,z*v);}       //Vector scaling
+  inline v4f operator%(vector4 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
+  inline vector4 operator^(vector4 r) const {return vector4(y*r.z-z*r.y,z*r.x-x*r.z,x*r.y-y*r.x);} //Cross-product
+  vector4(){}                                  //Empty constructor
+  inline vector4(v4f a, v4f b,v4f c){x=a;y=b;z=c;}            //Constructor
+  inline vector4(float a, float b, float c){x=make_v4f(a);y=make_v4f(b);z=make_v4f(c);}            //Constructor
+  inline vector4 operator!() const {return *this*(rsqrt(*this%*this));} // Used later for normalizing the vector
+  vector4(const vector* vec) {
+    x = make_v4f(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x());
+    y = make_v4f(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y());
+    z = make_v4f(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z());
+  }
+  vector4(const vector vec) {
+    x = make_v4f(vec.x());
+    y = make_v4f(vec.y());
+    z = make_v4f(vec.z());
+  }
+
+  vector getVector(int index) const {
+#if defined(_MSC_VER)
+    return vector(get(x, index), get(y, index), get(z, index));
+#else
+    // FIXME (gcc 4.8.1) : calling get(v4f, int) cause segfault
+    return vector(
+        reinterpret_cast<const float*>(&x)[index]
+      , reinterpret_cast<const float*>(&y)[index]
+      , reinterpret_cast<const float*>(&z)[index]
+    );
+#endif
+  }
+};
+#endif
+
+
 #if defined(RAYS_CPP_AVX)
 
 typedef __m256 v8f;
-typedef int v8bool;
 
 v8f make_v8f(float f) {
   return _mm256_set1_ps(f);
@@ -119,16 +228,8 @@ v8f rsqrt(v8f v) {
   return _mm256_rsqrt_ps(v);
 }
 
-v8bool compare_gt(v8f lhs, v8f rhs) {
+vbool compare_gt(v8f lhs, v8f rhs) {
   return _mm256_movemask_ps(_mm256_cmp_ps(lhs, rhs, _CMP_GT_OQ));
-}
-
-bool is_any(v8bool b) {
-  return 0 != b;
-}
-
-bool is_true(v8bool b, int index) {
-  return 0 != (b & (1 << index));
 }
 
 #if defined(_MSC_VER)
@@ -201,6 +302,9 @@ typedef std::chrono::high_resolution_clock Clock;
 typedef std::chrono::duration<double> ClockSec;
 typedef std::vector<vector> Objects;
 typedef std::vector<std::string> Art;
+#if defined(RAYS_CPP_SSE)
+typedef std::vector<vector4> Objects4;
+#endif
 #if defined(RAYS_CPP_AVX)
 typedef std::vector<vector8> Objects8;
 #endif
@@ -329,6 +433,23 @@ Objects makeObjects(const Art& art) {
   return o;
 }
 
+#if defined(RAYS_CPP_SSE)
+Objects4 makeObjects4(const Objects& objectsSrc) {
+  Objects4 o4;
+  const auto nVector = decltype(o4)::value_type::nVector;
+
+  auto o = objectsSrc;
+  while(o.size() % nVector != 0) {
+    o.push_back(o.back());
+  }
+
+  for(size_t i = 0; i < o.size(); i += nVector) {
+    o4.emplace_back(vector4(o.data() + i));
+  }
+  return o4;
+}
+#endif
+
 #if defined(RAYS_CPP_AVX)
 Objects8 makeObjects8(const Objects& objectsSrc) {
   Objects8 o8;
@@ -350,12 +471,18 @@ class Scene {
 public:
   Scene(const Art& art)
     : objects(makeObjects(art))
+#if defined(RAYS_CPP_SSE)
+    , objects4(makeObjects4(objects))
+#endif
 #if defined(RAYS_CPP_AVX)
     , objects8(makeObjects8(objects))
 #endif
     {}
 
   Objects objects;
+#if defined(RAYS_CPP_SSE)
+  Objects4 objects4;
+#endif
 #if defined(RAYS_CPP_AVX)
   Objects8 objects8;
 #endif
@@ -408,6 +535,47 @@ TracerResult tracer(const Scene& scene, vector o, vector d) {
     const auto nVector = vector8::nVector;
     const auto o8 = vector8(o);
     const auto d8 = vector8(d);
+    for(const auto& obj : objs) {
+      // There is a sphere but does the ray hits it ?
+      const auto p = o8 + obj;
+      const auto b = p % d8;
+      const auto c = p % p - 1.0f;
+      const auto b2 = b * b;
+      const auto mask = compare_gt(b2, c);
+      if (is_any(mask)) { // early bailout if nothing hit
+        const auto q = b2 - c;
+        const auto s_ = -b - sqrt(q);
+        // Does the ray hit the sphere ?
+
+        for(int j = 0; j < nVector; j++) {
+          if(is_true(mask, j)) {
+            const auto s = get(s_, j);
+            if(s < tr.t && s > .01f) {
+              const auto i = static_cast<int>(&obj - objs.data());
+              idx = i * nVector + j;
+              tr.t = s;
+            }
+          }
+        }
+      }
+    }
+
+    if (idx != -1) {
+      const auto i = idx / nVector;
+      const auto j = idx % nVector;
+      const auto p = o + objs[i].getVector(j);
+      tr.n = !(p + d * tr.t);
+      tr.m = Status::kHit;
+    }
+  }
+#elif defined(RAYS_CPP_SSE)
+  {
+    int idx = -1;
+
+    const auto& objs = scene.objects4;
+    const auto nVector = vector4::nVector;
+    const auto o8 = vector4(o);
+    const auto d8 = vector4(d);
     for(const auto& obj : objs) {
       // There is a sphere but does the ray hits it ?
       const auto p = o8 + obj;
