@@ -132,7 +132,7 @@ bool is_true(v8bool b, int index) {
 }
 
 #if defined(_MSC_VER)
-v8f operator+(__m256 lhs, __m256 rhs) {
+v8f operator+(v8f lhs, v8f rhs) {
   return _mm256_add_ps(lhs, rhs);
 }
 
@@ -152,8 +152,14 @@ v8f operator-(v8f v) {
 }
 #endif
 
+v8f operator-(v8f lhs, float rhs) {
+  return lhs - make_v8f(rhs);
+}
+
 
 struct vector8 {
+  enum { nVector = 8 };
+
   v8f x,y,z;  // Vector has 4 * three float attributes.
   inline vector8 operator+(vector8 r) const {return vector8(x+r.x,y+r.y,z+r.z);} //Vector add
   inline vector8 operator*(v8f r) const {return vector8(x*r,y*r,z*r);}       //Vector scaling
@@ -174,8 +180,20 @@ struct vector8 {
     y = make_v8f(vec.y());
     z = make_v8f(vec.z());
   }
-};
 
+  vector getVector(int index) const {
+#if defined(_MSC_VER)
+    return vector(get(x, index), get(y, index), get(z, index));
+#else
+    // FIXME (gcc 4.8.1) : calling get(v8f, int) cause segfault
+    return vector(
+        reinterpret_cast<const float*>(&x)[index]
+      , reinterpret_cast<const float*>(&y)[index]
+      , reinterpret_cast<const float*>(&z)[index]
+    );
+#endif
+  }
+};
 #endif
 
 
@@ -313,21 +331,18 @@ Objects makeObjects(const Art& art) {
 
 #if defined(RAYS_CPP_AVX)
 Objects8 makeObjects8(const Objects& objectsSrc) {
-  const size_t OBJ_ALIGN = 8;
+  Objects8 o8;
+  const auto nVector = decltype(o8)::value_type::nVector;
 
-  const auto objectsAlign8 = [&]() {
-    Objects o = objectsSrc;
-    while(o.size() % OBJ_ALIGN != 0) {
-      o.push_back(o.back());
-    }
-    return o;
-  }();
-
-  Objects8 o;
-  for(size_t i = 0; i < objectsAlign8.size(); i += OBJ_ALIGN) {
-    o.push_back(vector8(objectsAlign8.data() + i));
+  auto o = objectsSrc;
+  while(o.size() % nVector != 0) {
+    o.push_back(o.back());
   }
-  return o;
+
+  for(size_t i = 0; i < o.size(); i += nVector) {
+    o8.emplace_back(vector8(o.data() + i));
+  }
+  return o8;
 }
 #endif
 
@@ -377,64 +392,6 @@ struct TracerResult {
 TracerResult tracer(const Scene& scene, vector o, vector d) {
   auto tr = TracerResult { vector(0.0f, 0.0f, 1.0f), Status::kMissUpward, 1e9f };
 
-#if defined(RAYS_CPP_AVX)
-  {
-    const int nVector = 8;
-    auto t = tr.t;
-    auto m = (int) tr.m;
-    auto n = tr.n;
-    const int objects_size = static_cast<int>(scene.objects.size() + nVector - 1) / nVector;
-    int idx=-1;
-    float p=-o.z()/d.z();
-
-    if(.01f<p) {
-      t=p,n=vector(0,0,1),m=1;
-    }
-
-    vector8 o4 = vector8(o);
-    vector8 d4(d);
-    for(int i = 0; i < objects_size; i++) {
-      // There is a sphere but does the ray hits it ?
-      vector8 p = o4 + scene.objects8[i];
-      v8f b = p % d4;
-      v8f c = p % p - make_v8f(1.0f);
-      v8f b2 = b*b;
-      const auto mask = compare_gt(b2, c);
-      if (!is_any(mask)) { // early bailout if nothing hit
-        continue;
-      }
-      v8f q = b2 - c;
-      v8f s_ = -b - sqrt(q);
-      // Does the ray hit the sphere ?
-
-      for(int j = 0; j < nVector; j++) {
-        if(is_true(mask, j)) {
-          float s = get(s_, j);
-          if(s < t && s > .01f) {
-            idx = i*nVector+j;
-            t = s;
-          }
-        }
-      }
-    }
-
-    if (idx != -1) {
-      vector o2 = vector(o);
-      vector p = o2 + scene.objects[idx];
-      m = 2;
-      n=!(p + d * t);
-    }
-
-    tr.n = n;
-    tr.t = t;
-    switch(m) {
-      default:
-      case 0: tr.m = Status::kMissUpward; break;
-      case 1: tr.m = Status::kMissDownward; break;
-      case 2: tr.m = Status::kHit; break;
-    }
-  }
-#else
   const auto p = -o.z() / d.z();
 
   if(.01f < p) {
@@ -443,6 +400,48 @@ TracerResult tracer(const Scene& scene, vector o, vector d) {
     tr.m = Status::kMissDownward;
   }
 
+#if defined(RAYS_CPP_AVX)
+  {
+    int idx = -1;
+
+    const auto& objs = scene.objects8;
+    const auto nVector = vector8::nVector;
+    const auto o8 = vector8(o);
+    const auto d8 = vector8(d);
+    for(const auto& obj : objs) {
+      // There is a sphere but does the ray hits it ?
+      const auto p = o8 + obj;
+      const auto b = p % d8;
+      const auto c = p % p - 1.0f;
+      const auto b2 = b * b;
+      const auto mask = compare_gt(b2, c);
+      if (is_any(mask)) { // early bailout if nothing hit
+        const auto q = b2 - c;
+        const auto s_ = -b - sqrt(q);
+        // Does the ray hit the sphere ?
+
+        for(int j = 0; j < nVector; j++) {
+          if(is_true(mask, j)) {
+            const auto s = get(s_, j);
+            if(s < tr.t && s > .01f) {
+              const auto i = static_cast<int>(&obj - objs.data());
+              idx = i * nVector + j;
+              tr.t = s;
+            }
+          }
+        }
+      }
+    }
+
+    if (idx != -1) {
+      const auto i = idx / nVector;
+      const auto j = idx % nVector;
+      const auto p = o + objs[i].getVector(j);
+      tr.n = !(p + d * tr.t);
+      tr.m = Status::kHit;
+    }
+  }
+#else
   for (const auto& obj : scene.objects) {
     const auto p = o + obj;
     const auto b = p % d;
