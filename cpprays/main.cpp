@@ -8,6 +8,7 @@
 #include <chrono>
 #include <map>
 #include <numeric>
+#include "ArgumentParser.hpp"
 
 #if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 #include <smmintrin.h>
@@ -357,74 +358,6 @@ struct Result {
   std::vector<double> samples;
 };
 
-struct CommandLine {
-  CommandLine(int argc, char* argv[])
-    : megaPixels { 1.0 }
-    , times { 1 }
-    , procs { getMaxThreads() }
-    , outputFilename { "render.ppm" }
-    , resultFilename { "result.json" }
-    , artFilename { "ART" }
-    , home { getEnv("RAYS_HOME") }
-  {
-    typedef const std::string& Arg;
-    typedef std::function<void(Arg)> ArgFunc;
-    typedef std::map<std::string, ArgFunc> ArgFuncMap;
-
-    const ArgFuncMap optionMap {
-      { "-mp"  , [this](Arg v) { megaPixels = std::stof(v); } },
-      { "-t"   , [this](Arg v) { times = std::stoi(v); } },
-      { "-p"   , [this](Arg v) { procs = std::stoi(v); } },
-      { "-o"   , [this](Arg v) { outputFilename = v; } },
-      { "-r"   , [this](Arg v) { resultFilename = v; } },
-      { "-a"   , [this](Arg v) { artFilename = v; } },
-      { "-home", [this](Arg v) { home = v; } }
-    };
-
-    const auto delim = '=';
-    for(auto i = 1; i < argc; ++i) {
-      const auto arg = std::string { argv[i] };
-      const auto pos = arg.find(delim);
-      if(pos != std::string::npos) {
-        const auto a = arg.substr(0, pos);
-        const auto v = arg.substr(pos + 1);
-        const auto it = optionMap.find(a);
-        if(it != optionMap.end() && !v.empty()) {
-          it->second(v);
-        }
-      }
-    }
-  }
-
-  static std::string usage() {
-    return
-      "-mp=X      [        1.0] Megapixels of the rendered image\n"
-      "-t=N       [          1] Times to repeat the benchmark\n"
-      "-p=N       [   #Threads] Number of render threads\n"
-      "-o=FILE    [render.ppm ] Output file to write the rendered image to\n"
-      "-r=FILE    [result.json] Result file to write the benchmark data to\n"
-      "-a=FILE    [ART        ] the art file to use for rendering\n"
-      "-home=PATH [$RAYS_HOME ] RAYS folder\n";
-  }
-
-  static std::string getEnv(const std::string& env) {
-    const auto* s = std::getenv(env.c_str());
-    return std::string { s ? s : "" };
-  }
-
-  static int getMaxThreads(const int defaultMaxThreads = 8) {
-    const auto x = std::thread::hardware_concurrency();
-    return x ? x : defaultMaxThreads;
-  }
-
-  double megaPixels;
-  int times;
-  int procs;
-  std::string outputFilename;
-  std::string resultFilename;
-  std::string artFilename;
-  std::string home;
-};
 
 Art readArt(std::istream& artFile) {
   Art art;
@@ -672,27 +605,12 @@ void worker(unsigned char* dst, int imageSize, const Scene& scene, unsigned int 
 
 int main(int argc, char **argv) {
   auto& outlog = std::cerr;
-
-  const auto cl = CommandLine { argc, argv };
-  const auto artFilename = [&]() {
-    std::string s;
-    if(cl.artFilename == "ART" && !cl.home.empty()) {
-      s += cl.home + "/";
-    }
-    return s + cl.artFilename;
-  }();
-  std::ifstream artFile { artFilename }; // don't use auto for GCC 4.6
-
-  if (artFile.fail()) {
-    outlog << "Failed to open ART file (" << artFilename << ")" << std::endl;
-    std::exit(1);
-  }
-
-  const auto art = readArt(artFile);
+  const auto cl = ArgumentParser { argc, argv, outlog };
+  const auto art = readArt(cl.artFile);
   const auto scene = Scene { art };
   auto result = Result { static_cast<size_t>(cl.times) };
 
-  const auto imageSize = static_cast<int>(sqrt(cl.megaPixels * 1000.0 * 1000.0));
+  const auto imageSize = static_cast<int>(sqrt(cl.megaPixel * 1000.0 * 1000.0));
   auto bytes = std::vector<unsigned char>(3 * imageSize * imageSize, 0);
 
   for(auto iTimes = 0; iTimes < cl.times; ++iTimes) {
@@ -714,10 +632,7 @@ int main(int argc, char **argv) {
 
   outlog << "Average time taken " << result.average() << "s" << std::endl;
 
-  std::ofstream output { cl.outputFilename }; // don't use auto for GCC 4.6
-  output << "P6 " << imageSize << " " << imageSize << " 255 "; // The PPM Header is issued
-  output.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
-
-  std::ofstream resultFile { cl.resultFilename }; // don't use auto for GCC 4.6
-  resultFile << result.toJson();
+  cl.outputFile << "P6 " << imageSize << " " << imageSize << " 255 "; // The PPM Header is issued
+  cl.outputFile.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
+  cl.resultFile << result.toJson();
 }
