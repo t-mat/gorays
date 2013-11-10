@@ -9,6 +9,7 @@
 #include <map>
 #include <numeric>
 #include "ArgumentParser.hpp"
+#include "Result.hpp"
 
 #if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 #include <smmintrin.h>
@@ -326,38 +327,10 @@ struct Float32x8x3 {
 };
 #endif
 
-
 typedef std::chrono::high_resolution_clock Clock;
 typedef std::chrono::duration<double> ClockSec;
 typedef std::vector<vector> Objects;
 typedef std::vector<std::string> Art;
-
-struct Result {
-  Result(size_t times)
-    : samples(times, 0.0)
-  {}
-
-  std::string toJson() const {
-    std::ostringstream o; // don't use auto for GCC 4.6
-    o << "{\"average\":" << average() << ",";
-    o << "\"samples\":[";
-    for(size_t i = 0; i < samples.size(); ++i) {
-      if(0 != i) {
-        o << ",";
-      }
-      o << samples[i];
-    }
-    o << "]}\n";
-    return o.str();
-  }
-
-  double average() const {
-    return std::accumulate(samples.begin(), samples.end(), 0.0) / samples.size();
-  }
-
-  std::vector<double> samples;
-};
-
 
 Art readArt(std::istream& artFile) {
   Art art;
