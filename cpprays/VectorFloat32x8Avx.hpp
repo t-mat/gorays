@@ -50,10 +50,10 @@ Float32x8 operator-(Float32x8 v) {
   // http://stackoverflow.com/a/3528787/2132223
   return _mm256_xor_ps(v, _mm256_set1_ps(-0.f));
 }
-#endif
 
 Float32x8 operator-(Float32x8 lhs, float rhs) {
   return lhs - makeFloat32x8(rhs);
 }
+#endif
 
 #endif

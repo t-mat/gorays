@@ -48,11 +48,12 @@ inline Float32x4 operator-(Float32x4 v) {
   // http://stackoverflow.com/a/3528787/2132223
   return _mm_xor_ps(v, _mm_set1_ps(-0.f));
 }
-#endif
 
 inline Float32x4 operator-(Float32x4 lhs, float rhs) {
   return lhs - makeFloat32x4(rhs);
 }
+#endif
+
 
 
 //

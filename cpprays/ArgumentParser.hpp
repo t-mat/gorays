@@ -48,9 +48,10 @@ struct ArgumentParser {
       artFilename = home + "/" + artFilename;
     }
 
-    outputFile = std::ofstream { outputFilename };
-    resultFile = std::ofstream { resultFilename };
-    artFile    = std::ifstream { artFilename    };
+    // Don't use move constructor for GCC [4.6 , 4.8]
+    outputFile.open(outputFilename);
+    resultFile.open(resultFilename);
+    artFile.open(artFilename);
 
     if (artFile.fail()) { // FIXME Use exception
       outlog << "Failed to open ART file (" << artFilename << ")" << std::endl;

@@ -66,25 +66,6 @@ public:
     return *this * (1.f / sqrtf(*this % *this));
   }
 
-  // TODO Implement more generic way
-  template<class T> static T make(const vector* vec);
-
-  template<> static Float32x4x3 vector::make<Float32x4x3>(const vector* vec) {
-   return Float32x4x3(
-       makeFloat32x4(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
-     , makeFloat32x4(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
-     , makeFloat32x4(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()));
-  }
-
-#if defined(RAYS_CPP_HAVE_FLOAT32X8)
-  template<> static Float32x8x3 vector::make<Float32x8x3>(const vector* vec) {
-    return Float32x8x3(
-        makeFloat32x8(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
-      , makeFloat32x8(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
-      , makeFloat32x8(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()));
-  }
-#endif
-
   template<class T> static T make(const vector vec) {
     return T(vec.x(), vec.y(), vec.z());
   }
@@ -102,9 +83,27 @@ public:
 #endif
   }
 
-private:
   Float32x4 xyzw;
 };
+
+// TODO Implement more generic way
+template<class T> T make(const vector* vec);
+
+template<> Float32x4x3 make(const vector* vec) {
+   return Float32x4x3(
+       makeFloat32x4(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
+     , makeFloat32x4(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
+     , makeFloat32x4(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()));
+  }
+
+#if defined(RAYS_CPP_HAVE_FLOAT32X8)
+template<> Float32x8x3 make(const vector* vec) {
+  return Float32x8x3(
+      makeFloat32x8(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
+    , makeFloat32x8(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
+    , makeFloat32x8(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()));
+}
+#endif
 
 #else
 
@@ -138,6 +137,8 @@ private:
 };
 
 #endif
+
+
 
 typedef std::chrono::high_resolution_clock Clock;
 typedef std::chrono::duration<double> ClockSec;
@@ -203,7 +204,7 @@ public:
     }
 
     for(size_t i = 0; i < o.size(); i += nVector) {
-      os.emplace_back(vector::make<V>(o.data() + i));
+      os.emplace_back(make<V>(o.data() + i));
     }
     return os;
   }
@@ -396,7 +397,7 @@ void worker(Image& image, int imageSize, const Scene& scene, unsigned int seed, 
 
 int main(int argc, char **argv) {
   auto& outlog = std::cerr;
-  const auto cl = ArgumentParser { argc, argv, outlog };
+  const ArgumentParser cl { argc, argv, outlog }; // Don't use move constructor for GCC [4.6 , 4.8]
   const auto art = readArt(cl.artFile);
   const auto scene = Scene { art };
   auto result = Result { static_cast<size_t>(cl.times) };
