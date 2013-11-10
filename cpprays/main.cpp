@@ -13,50 +13,97 @@
 #include "Result.hpp"
 
 #if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+typedef int vbool;
+
+bool is_any(vbool b) {
+  return 0 != b;
+}
+
+bool is_true(vbool b, int index) {
+  return 0 != (b & (1 << index));
+}
+#endif
+
+#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 #include <smmintrin.h>
+#include "VectorFloat32x4Sse.hpp"
+#include "VectorFloat32x4x3.hpp"
+#define RAYS_CPP_HAVE_FLOAT32X4
 #endif
 
 #if defined(RAYS_CPP_AVX)
 #include <immintrin.h>
+#include "VectorFloat32x8Avx.hpp"
+#include "VectorFloat32x8x3.hpp"
+#define RAYS_CPP_HAVE_FLOAT32X8
 #endif
 
-#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+#if defined(RAYS_CPP_HAVE_FLOAT32X4)
 
 class vector {
 public:
-  vector() { }
-  vector(__m128 a) { xyzw = a; }
-  vector(float a, float b, float c) {
-    xyzw = _mm_set_ps(0.0, c, b, a);
-  }
+  vector() {}
+  vector(Float32x4 a) : xyzw(a) {}
+  vector(float a, float b, float c) : vector(makeFloat32x4(0.0f, c, b, a)) {}
 
-  float x() const { float v[4]; _mm_store_ps(v, xyzw); return v[0]; }
-  float y() const { float v[4]; _mm_store_ps(v, xyzw); return v[1]; }
-  float z() const { float v[4]; _mm_store_ps(v, xyzw); return v[2]; }
+  float x() const { return get(xyzw, 0); }
+  float y() const { return get(xyzw, 1); }
+  float z() const { return get(xyzw, 2); }
 
   vector operator+(const vector r) const {
-    return _mm_add_ps(xyzw, r.xyzw);
+    return vector(xyzw + r.xyzw);
   }
   vector operator*(const float r) const {
-    return _mm_mul_ps(_mm_set1_ps(r), xyzw);
+    return vector(xyzw * makeFloat32x4(r));
   }
   float operator%(const vector r) const {
-    float ret; _mm_store_ss(&ret, _mm_dp_ps(r.xyzw, xyzw, 0x71));
-    return ret;
+    return dot3(xyzw, r.xyzw);
   }
   vector operator^(vector r) const {
-    const __m128 & a = xyzw, & b = r.xyzw;
-    return _mm_sub_ps(
-      _mm_mul_ps(_mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 0, 2, 1)), _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 1, 0, 2))),
-      _mm_mul_ps(_mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 1, 0, 2)), _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1)))
-    );
+    return cross3(xyzw, r.xyzw);
   }
   vector operator!() const {
-    return *this*(1.f/sqrtf(*this%*this));
+    return *this * (1.f / sqrtf(*this % *this));
+  }
+
+  // TODO Implement more generic way
+  template<class T> static T make(const vector* vec);
+
+  template<> static Float32x4x3 vector::make<Float32x4x3>(const vector* vec) {
+   return Float32x4x3(
+       makeFloat32x4(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
+     , makeFloat32x4(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
+     , makeFloat32x4(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()));
+  }
+
+#if defined(RAYS_CPP_HAVE_FLOAT32X8)
+  template<> static Float32x8x3 vector::make<Float32x8x3>(const vector* vec) {
+    return Float32x8x3(
+        makeFloat32x8(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
+      , makeFloat32x8(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
+      , makeFloat32x8(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()));
+  }
+#endif
+
+  template<class T> static T make(const vector vec) {
+    return T(vec.x(), vec.y(), vec.z());
+  }
+
+  template<class T> static vector getVector(const T& t, int index) {
+#if defined(_MSC_VER)
+    return vector(get(t.x, index), get(t.y, index), get(t.z, index));
+#else
+    // FIXME (gcc 4.8.1) : calling get(Float32x[4|8], int) cause segfault
+    return vector(
+        reinterpret_cast<const float*>(&t.x)[index]
+      , reinterpret_cast<const float*>(&t.y)[index]
+      , reinterpret_cast<const float*>(&t.z)[index]
+    );
+#endif
   }
 
 private:
-    __m128 xyzw;
+  Float32x4 xyzw;
 };
 
 #else
@@ -90,242 +137,6 @@ private:
   float _x, _y, _z;  // Vector has three float attributes.
 };
 
-#endif
-
-
-#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
-typedef int vbool;
-
-bool is_any(vbool b) {
-  return 0 != b;
-}
-
-bool is_true(vbool b, int index) {
-  return 0 != (b & (1 << index));
-}
-#endif
-
-
-#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
-typedef __m128 Float32x4;
-
-Float32x4 make_Float32x4(float f) {
-  return _mm_set1_ps(f);
-}
-
-Float32x4 make_Float32x4(float f0, float f1, float f2, float f3) {
-  return _mm_set_ps(f0, f1, f2, f3);
-}
-
-float get(Float32x4 v, int index) {
-#if defined(_MSC_VER)
-  return v.m128_f32[index];
-#else
-  return reinterpret_cast<const float*>(&v)[index];
-#endif
-}
-
-Float32x4 sqrt(Float32x4 v) {
-  return _mm_sqrt_ps(v);
-}
-
-Float32x4 rsqrt(Float32x4 v) {
-  return _mm_rsqrt_ps(v);
-}
-
-vbool compare_gt(Float32x4 lhs, Float32x4 rhs) {
-  return _mm_movemask_ps(_mm_cmp_ps(lhs, rhs, _CMP_GT_OQ));
-}
-
-#if defined(_MSC_VER)
-Float32x4 operator+(Float32x4 lhs, Float32x4 rhs) {
-  return _mm_add_ps(lhs, rhs);
-}
-
-Float32x4 operator-(Float32x4 lhs, Float32x4 rhs) {
-  return _mm_sub_ps(lhs, rhs);
-}
-
-Float32x4 operator*(Float32x4 lhs, Float32x4 rhs) {
-  return _mm_mul_ps(lhs, rhs);
-}
-
-Float32x4 operator-(Float32x4 v) {
-  // Flipping sign on packed SSE floats
-  // http://stackoverflow.com/questions/3361132/flipping-sign-on-packed-sse-floats
-  // http://stackoverflow.com/a/3528787/2132223
-  return _mm_xor_ps(v, _mm_set1_ps(-0.f));
-}
-#endif
-
-Float32x4 operator-(Float32x4 lhs, float rhs) {
-  return lhs - make_Float32x4(rhs);
-}
-
-
-struct Float32x4x3 {
-  enum { nVector = 4 };
-
-  Float32x4 x, y, z;  // Vector has 4 * three float attributes.
-
-  Float32x4x3() {}                                   //Empty constructor
-  Float32x4x3(Float32x4 a, Float32x4 b, Float32x4 c) //Constructor
-    : x(a), y(b), z(c) {}
-  Float32x4x3(float a, float b, float c)             //Constructor
-    : Float32x4x3(make_Float32x4(a), make_Float32x4(b), make_Float32x4(c)) {}
-  Float32x4x3(const vector vec)
-    : Float32x4x3(vec.x(), vec.y(), vec.z()) {}
-  Float32x4x3(const vector* vec)
-    : Float32x4x3(
-        make_Float32x4(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
-      , make_Float32x4(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
-      , make_Float32x4(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()))
-  {}
-
-  Float32x4x3 operator+(Float32x4x3 r) const {           //Vector add
-    return Float32x4x3(x+r.x, y+r.y, z+r.z);
-  }
-  Float32x4x3 operator*(Float32x4 r) const {         //Vector multiply
-    return Float32x4x3(x*r, y*r, z*r);
-  }
-  Float32x4x3 operator*(float r) const {             //Vector scaling
-    return *this * make_Float32x4(r);
-  }
-  Float32x4 operator%(Float32x4x3 r) const {         //Vector dot product
-    return x*r.x + y*r.y + z*r.z;
-  }
-  Float32x4x3 operator^(Float32x4x3 r) const {           //Cross-product
-    return Float32x4x3(y*r.z-z*r.y, z*r.x-x*r.z, x*r.y-y*r.x);
-  }
-  Float32x4x3 operator!() const { // Used later for normalizing the vector
-    return *this * (rsqrt(*this%*this));
-  }
-
-  vector getVector(int index) const {
-#if defined(_MSC_VER)
-    return vector(get(x, index), get(y, index), get(z, index));
-#else
-    // FIXME (gcc 4.8.1) : calling get(Float32x4, int) cause segfault
-    return vector(
-        reinterpret_cast<const float*>(&x)[index]
-      , reinterpret_cast<const float*>(&y)[index]
-      , reinterpret_cast<const float*>(&z)[index]
-    );
-#endif
-  }
-};
-#endif
-
-
-#if defined(RAYS_CPP_AVX)
-
-typedef __m256 Float32x8;
-
-Float32x8 make_Float32x8(float f) {
-  return _mm256_set1_ps(f);
-}
-
-Float32x8 make_Float32x8(float f0, float f1, float f2, float f3, float f4, float f5, float f6, float f7) {
-  return _mm256_set_ps(f0, f1, f2, f3, f4, f5, f6, f7);
-}
-
-float get(Float32x8 v, int index) {
-#if defined(_MSC_VER)
-  return v.m256_f32[index];
-#else
-  return reinterpret_cast<const float*>(&v)[index];
-#endif
-}
-
-Float32x8 sqrt(Float32x8 v) {
-  return _mm256_sqrt_ps(v);
-}
-
-Float32x8 rsqrt(Float32x8 v) {
-  return _mm256_rsqrt_ps(v);
-}
-
-vbool compare_gt(Float32x8 lhs, Float32x8 rhs) {
-  return _mm256_movemask_ps(_mm256_cmp_ps(lhs, rhs, _CMP_GT_OQ));
-}
-
-#if defined(_MSC_VER)
-Float32x8 operator+(Float32x8 lhs, Float32x8 rhs) {
-  return _mm256_add_ps(lhs, rhs);
-}
-
-Float32x8 operator-(Float32x8 lhs, Float32x8 rhs) {
-  return _mm256_sub_ps(lhs, rhs);
-}
-
-Float32x8 operator*(Float32x8 lhs, Float32x8 rhs) {
-  return _mm256_mul_ps(lhs, rhs);
-}
-
-Float32x8 operator-(Float32x8 v) {
-  // Flipping sign on packed SSE floats
-  // http://stackoverflow.com/questions/3361132/flipping-sign-on-packed-sse-floats
-  // http://stackoverflow.com/a/3528787/2132223
-  return _mm256_xor_ps(v, _mm256_set1_ps(-0.f));
-}
-#endif
-
-Float32x8 operator-(Float32x8 lhs, float rhs) {
-  return lhs - make_Float32x8(rhs);
-}
-
-
-struct Float32x8x3 {
-  enum { nVector = 8 };
-
-  Float32x8 x, y, z;  // Vector has 8 * three float attributes.
-
-  Float32x8x3() {}                                   //Empty constructor
-  Float32x8x3(Float32x8 a, Float32x8 b, Float32x8 c) //Constructor
-    : x(a), y(b), z(c) {}
-  Float32x8x3(float a, float b, float c)             //Constructor
-    : Float32x8x3(make_Float32x8(a), make_Float32x8(b), make_Float32x8(c)) {}
-  Float32x8x3(const vector vec)
-    : Float32x8x3(vec.x(), vec.y(), vec.z()) {}
-  Float32x8x3(const vector* vec)
-    : Float32x8x3(
-        make_Float32x8(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
-      , make_Float32x8(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
-      , make_Float32x8(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()))
-    {}
-
-  Float32x8x3 operator+(Float32x8x3 r) const {           //Vector add
-    return Float32x8x3(x+r.x, y+r.y, z+r.z);
-  }
-  Float32x8x3 operator*(Float32x8 r) const {         //Vector multiply
-    return Float32x8x3(x*r, y*r, z*r);
-  }
-  Float32x8x3 operator*(float r) const {             //Vector scaling
-    return *this * make_Float32x8(r);
-  }
-  Float32x8 operator%(Float32x8x3 r) const {         //Vector dot product
-    return x*r.x + y*r.y + z*r.z;
-  }
-  Float32x8x3 operator^(Float32x8x3 r) const {           //Cross-product
-    return Float32x8x3(y*r.z-z*r.y, z*r.x-x*r.z, x*r.y-y*r.x);
-  }
-  Float32x8x3 operator!() const { // Used later for normalizing the vector
-    return *this * (rsqrt(*this%*this));
-  }
-
-  vector getVector(int index) const {
-#if defined(_MSC_VER)
-    return vector(get(x, index), get(y, index), get(z, index));
-#else
-    // FIXME (gcc 4.8.1) : calling get(Float32x8, int) cause segfault
-    return vector(
-        reinterpret_cast<const float*>(&x)[index]
-      , reinterpret_cast<const float*>(&y)[index]
-      , reinterpret_cast<const float*>(&z)[index]
-    );
-#endif
-  }
-};
 #endif
 
 typedef std::chrono::high_resolution_clock Clock;
@@ -366,18 +177,18 @@ class Scene {
 public:
   Scene(const Art& art)
     : objects(makeObjects(art))
-#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+#if defined(RAYS_CPP_HAVE_FLOAT32X4) || defined(RAYS_CPP_HAVE_FLOAT32X8)
     , objectsN(makeObjectsN(objects))
 #endif
     {}
 
   Objects objects;
 
-#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+#if defined(RAYS_CPP_HAVE_FLOAT32X4) || defined(RAYS_CPP_HAVE_FLOAT32X8)
 
-#if defined(RAYS_CPP_AVX)
+#if defined(RAYS_CPP_HAVE_FLOAT32X8)
   typedef std::vector<Float32x8x3> ObjectsN;
-#elif defined(RAYS_CPP_SSE)
+#elif defined(RAYS_CPP_HAVE_FLOAT32X4)
   typedef std::vector<Float32x4x3> ObjectsN;
 #endif
 
@@ -392,7 +203,7 @@ public:
     }
 
     for(size_t i = 0; i < o.size(); i += nVector) {
-      os.emplace_back(V(o.data() + i));
+      os.emplace_back(vector::make<V>(o.data() + i));
     }
     return os;
   }
@@ -448,7 +259,7 @@ TracerResult tracer(const Scene& scene, vector o, vector d) {
     tr.m = Status::kMissDownward;
   }
 
-#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+#if defined(RAYS_CPP_HAVE_FLOAT32X4) || defined(RAYS_CPP_HAVE_FLOAT32X8)
   {
     int idx = -1;
 
@@ -456,8 +267,8 @@ TracerResult tracer(const Scene& scene, vector o, vector d) {
     typedef std::remove_reference<decltype(objs)>::type Vs;
     typedef Vs::value_type V; // Float32x4x3 or Float32x8x3
     const auto nVector = V::nVector; // 4 or 8
-    const auto o8 = V(o);
-    const auto d8 = V(d);
+    const auto o8 = vector::make<V>(o);
+    const auto d8 = vector::make<V>(d);
     for(const auto& obj : objs) {
       // There is a sphere but does the ray hits it ?
       const auto p = o8 + obj;
@@ -486,7 +297,7 @@ TracerResult tracer(const Scene& scene, vector o, vector d) {
     if (idx != -1) {
       const auto i = idx / nVector;
       const auto j = idx % nVector;
-      const auto p = o + objs[i].getVector(j);
+      const auto p = o + vector::getVector<V>(objs[i], j);
       tr.n = !(p + d * tr.t);
       tr.m = Status::kHit;
     }
