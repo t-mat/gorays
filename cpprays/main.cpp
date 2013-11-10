@@ -103,7 +103,7 @@ bool is_true(vbool b, int index) {
 #endif
 
 
-#if defined(RAYS_CPP_SSE)
+#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 typedef __m128 Float32x4;
 
 Float32x4 make_Float32x4(float f) {
@@ -163,25 +163,39 @@ Float32x4 operator-(Float32x4 lhs, float rhs) {
 struct vector4 {
   enum { nVector = 4 };
 
-  Float32x4 x,y,z;  // Vector has 4 * three float attributes.
-  inline vector4 operator+(vector4 r) const {return vector4(x+r.x,y+r.y,z+r.z);} //Vector add
-  inline vector4 operator*(Float32x4 r) const {return vector4(x*r,y*r,z*r);}       //Vector scaling
-  inline vector4 operator*(float r) const {Float32x4 v=make_Float32x4(r); return vector4(x*v,y*v,z*v);}       //Vector scaling
-  inline Float32x4 operator%(vector4 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
-  inline vector4 operator^(vector4 r) const {return vector4(y*r.z-z*r.y,z*r.x-x*r.z,x*r.y-y*r.x);} //Cross-product
-  vector4(){}                                  //Empty constructor
-  inline vector4(Float32x4 a, Float32x4 b,Float32x4 c){x=a;y=b;z=c;}            //Constructor
-  inline vector4(float a, float b, float c){x=make_Float32x4(a);y=make_Float32x4(b);z=make_Float32x4(c);}            //Constructor
-  inline vector4 operator!() const {return *this*(rsqrt(*this%*this));} // Used later for normalizing the vector
-  vector4(const vector* vec) {
-    x = make_Float32x4(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x());
-    y = make_Float32x4(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y());
-    z = make_Float32x4(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z());
+  Float32x4 x, y, z;  // Vector has 4 * three float attributes.
+
+  vector4() {}                                   //Empty constructor
+  vector4(Float32x4 a, Float32x4 b, Float32x4 c) //Constructor
+    : x(a), y(b), z(c) {}
+  vector4(float a, float b, float c)             //Constructor
+    : vector4(make_Float32x4(a), make_Float32x4(b), make_Float32x4(c)) {}
+  vector4(const vector vec)
+    : vector4(vec.x(), vec.y(), vec.z()) {}
+  vector4(const vector* vec)
+    : vector4(
+        make_Float32x4(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
+      , make_Float32x4(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
+      , make_Float32x4(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()))
+  {}
+
+  vector4 operator+(vector4 r) const {           //Vector add
+    return vector4(x+r.x, y+r.y, z+r.z);
   }
-  vector4(const vector vec) {
-    x = make_Float32x4(vec.x());
-    y = make_Float32x4(vec.y());
-    z = make_Float32x4(vec.z());
+  vector4 operator*(Float32x4 r) const {         //Vector multiply
+    return vector4(x*r, y*r, z*r);
+  }
+  vector4 operator*(float r) const {             //Vector scaling
+    return *this * make_Float32x4(r);
+  }
+  Float32x4 operator%(vector4 r) const {         //Vector dot product
+    return x*r.x + y*r.y + z*r.z;
+  }
+  vector4 operator^(vector4 r) const {           //Cross-product
+    return vector4(y*r.z-z*r.y, z*r.x-x*r.z, x*r.y-y*r.x);
+  }
+  vector4 operator!() const { // Used later for normalizing the vector
+    return *this * (rsqrt(*this%*this));
   }
 
   vector getVector(int index) const {
@@ -261,25 +275,39 @@ Float32x8 operator-(Float32x8 lhs, float rhs) {
 struct vector8 {
   enum { nVector = 8 };
 
-  Float32x8 x,y,z;  // Vector has 4 * three float attributes.
-  inline vector8 operator+(vector8 r) const {return vector8(x+r.x,y+r.y,z+r.z);} //Vector add
-  inline vector8 operator*(Float32x8 r) const {return vector8(x*r,y*r,z*r);}       //Vector scaling
-  inline vector8 operator*(float r) const {Float32x8 v=make_Float32x8(r); return vector8(x*v,y*v,z*v);}       //Vector scaling
-  inline Float32x8 operator%(vector8 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
-  inline vector8 operator^(vector8 r) const {return vector8(y*r.z-z*r.y,z*r.x-x*r.z,x*r.y-y*r.x);} //Cross-product
-  vector8(){}                                  //Empty constructor
-  inline vector8(Float32x8 a, Float32x8 b,Float32x8 c){x=a;y=b;z=c;}            //Constructor
-  inline vector8(float a, float b, float c){x=make_Float32x8(a);y=make_Float32x8(b);z=make_Float32x8(c);}            //Constructor
-  inline vector8 operator!() const {return *this*(rsqrt(*this%*this));} // Used later for normalizing the vector
-  vector8(const vector* vec) {
-    x = make_Float32x8(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x());
-    y = make_Float32x8(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y());
-    z = make_Float32x8(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z());
+  Float32x8 x, y, z;  // Vector has 8 * three float attributes.
+
+  vector8() {}                                   //Empty constructor
+  vector8(Float32x8 a, Float32x8 b, Float32x8 c) //Constructor
+    : x(a), y(b), z(c) {}
+  vector8(float a, float b, float c)             //Constructor
+    : vector8(make_Float32x8(a), make_Float32x8(b), make_Float32x8(c)) {}
+  vector8(const vector vec)
+    : vector8(vec.x(), vec.y(), vec.z()) {}
+  vector8(const vector* vec)
+    : vector8(
+        make_Float32x8(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
+      , make_Float32x8(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
+      , make_Float32x8(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()))
+    {}
+
+  vector8 operator+(vector8 r) const {           //Vector add
+    return vector8(x+r.x, y+r.y, z+r.z);
   }
-  vector8(const vector vec) {
-    x = make_Float32x8(vec.x());
-    y = make_Float32x8(vec.y());
-    z = make_Float32x8(vec.z());
+  vector8 operator*(Float32x8 r) const {         //Vector multiply
+    return vector8(x*r, y*r, z*r);
+  }
+  vector8 operator*(float r) const {             //Vector scaling
+    return *this * make_Float32x8(r);
+  }
+  Float32x8 operator%(vector8 r) const {         //Vector dot product
+    return x*r.x + y*r.y + z*r.z;
+  }
+  vector8 operator^(vector8 r) const {           //Cross-product
+    return vector8(y*r.z-z*r.y, z*r.x-x*r.z, x*r.y-y*r.x);
+  }
+  vector8 operator!() const { // Used later for normalizing the vector
+    return *this * (rsqrt(*this%*this));
   }
 
   vector getVector(int index) const {
