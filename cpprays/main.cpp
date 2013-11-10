@@ -8,6 +8,7 @@
 #include <chrono>
 #include <map>
 #include <numeric>
+#include "PixelImage.hpp"
 #include "ArgumentParser.hpp"
 #include "Result.hpp"
 
@@ -416,6 +417,14 @@ unsigned char clamp(float v) {
   }
 }
 
+Pixel vectorToPixel(const vector& v) {
+  Pixel p;
+  p.r = clamp(v.x());
+  p.g = clamp(v.y());
+  p.b = clamp(v.z());
+  return p;
+}
+
 enum class Status {
   kMissUpward,
   kMissDownward,
@@ -540,7 +549,7 @@ vector sampler(const Scene& scene, vector o,vector d, unsigned int& seed) {
   return vector(p,p,p)+sampler(scene, h,r,seed)*.5f;
 }
 
-void worker(unsigned char* dst, int imageSize, const Scene& scene, unsigned int seed, int offset, int jump) {
+void worker(Image& image, int imageSize, const Scene& scene, unsigned int seed, int offset, int jump) {
   const auto g = !vector(-3.1f, -16.f, 1.9f);
   const auto a = !(vector(0.0f, 0.0f, 1.0f)^g) * .002f;
   const auto b = !(g^a)*.002f;
@@ -549,7 +558,7 @@ void worker(unsigned char* dst, int imageSize, const Scene& scene, unsigned int 
   const auto orig0 = vector(-5.0f, 16.0f, 8.0f);
 
   for (auto y = offset; y < imageSize; y += jump) {
-    auto k = (imageSize - y - 1) * imageSize * 3;
+    auto k = (imageSize - y - 1) * imageSize;
 
     for(auto x=imageSize;x--;) {
       auto p = vector(13.0f, 13.0f, 13.0f);
@@ -569,9 +578,7 @@ void worker(unsigned char* dst, int imageSize, const Scene& scene, unsigned int 
         p = s * 3.5f + p;
       }
 
-      dst[k++] = clamp(p.x());
-      dst[k++] = clamp(p.y());
-      dst[k++] = clamp(p.z());
+      image[k++] = vectorToPixel(p);
     }
   }
 }
@@ -584,7 +591,7 @@ int main(int argc, char **argv) {
   auto result = Result { static_cast<size_t>(cl.times) };
 
   const auto imageSize = static_cast<int>(sqrt(cl.megaPixel * 1000.0 * 1000.0));
-  auto bytes = std::vector<unsigned char>(3 * imageSize * imageSize, 0);
+  auto image = Image(imageSize * imageSize, Pixel::zero());
 
   for(auto iTimes = 0; iTimes < cl.times; ++iTimes) {
     const auto t0 = Clock::now();
@@ -592,7 +599,7 @@ int main(int argc, char **argv) {
     auto rgen = std::mt19937 {};
     auto threads = std::vector<std::thread>{};
     for(auto i = 0; i < cl.procs; ++i) {
-      threads.emplace_back(worker, bytes.data(), imageSize, scene, rgen(), i, cl.procs);
+      threads.emplace_back(worker, std::ref(image), imageSize, std::ref(scene), rgen(), i, cl.procs);
     }
     for(auto& t : threads) {
       t.join();
@@ -606,6 +613,6 @@ int main(int argc, char **argv) {
   outlog << "Average time taken " << result.average() << "s" << std::endl;
 
   cl.outputFile << "P6 " << imageSize << " " << imageSize << " 255 "; // The PPM Header is issued
-  cl.outputFile.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
+  cl.outputFile.write(reinterpret_cast<char*>(image.data()), image.size() * sizeof(image[0]));
   cl.resultFile << result.toJson();
 }
