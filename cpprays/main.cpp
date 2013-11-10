@@ -589,9 +589,7 @@ int main(int argc, char **argv) {
   const auto art = readArt(cl.artFile);
   const auto scene = Scene { art };
   auto result = Result { static_cast<size_t>(cl.times) };
-
-  const auto imageSize = static_cast<int>(sqrt(cl.megaPixel * 1000.0 * 1000.0));
-  auto image = Image(imageSize * imageSize, Pixel::zero());
+  auto image = Image(cl.imageSize * cl.imageSize, Pixel::zero());
 
   for(auto iTimes = 0; iTimes < cl.times; ++iTimes) {
     const auto t0 = Clock::now();
@@ -599,7 +597,7 @@ int main(int argc, char **argv) {
     auto rgen = std::mt19937 {};
     auto threads = std::vector<std::thread>{};
     for(auto i = 0; i < cl.procs; ++i) {
-      threads.emplace_back(worker, std::ref(image), imageSize, std::ref(scene), rgen(), i, cl.procs);
+      threads.emplace_back(worker, std::ref(image), cl.imageSize, std::ref(scene), rgen(), i, cl.procs);
     }
     for(auto& t : threads) {
       t.join();
@@ -612,7 +610,7 @@ int main(int argc, char **argv) {
 
   outlog << "Average time taken " << result.average() << "s" << std::endl;
 
-  cl.outputFile << "P6 " << imageSize << " " << imageSize << " 255 "; // The PPM Header is issued
+  cl.outputFile << "P6 " << cl.imageSize << " " << cl.imageSize << " 255 "; // The PPM Header is issued
   cl.outputFile.write(reinterpret_cast<char*>(image.data()), image.size() * sizeof(image[0]));
   cl.resultFile << result.toJson();
 }

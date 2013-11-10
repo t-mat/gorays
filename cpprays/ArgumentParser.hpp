@@ -10,6 +10,7 @@ struct ArgumentParser {
     , resultFilename { "result.json" }
     , artFilename { "ART" }
     , home { getEnv("RAYS_HOME") }
+    , imageSize(1000)
   {
     typedef const std::string& Arg;
     typedef std::function<void(Arg)> ArgFunc;
@@ -40,6 +41,8 @@ struct ArgumentParser {
         }
       }
     }
+
+    imageSize = static_cast<int>(sqrt(megaPixel * 1000.0 * 1000.0));
 
     if(artFilename == "ART" && !home.empty()) {
       artFilename = home + "/" + artFilename;
@@ -84,6 +87,7 @@ struct ArgumentParser {
   std::string resultFilename;
   std::string artFilename;
   std::string home;
+  int imageSize;
 
   mutable std::ofstream outputFile;
   mutable std::ofstream resultFile;
