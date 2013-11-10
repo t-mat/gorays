@@ -160,41 +160,41 @@ Float32x4 operator-(Float32x4 lhs, float rhs) {
 }
 
 
-struct vector4 {
+struct Float32x4x3 {
   enum { nVector = 4 };
 
   Float32x4 x, y, z;  // Vector has 4 * three float attributes.
 
-  vector4() {}                                   //Empty constructor
-  vector4(Float32x4 a, Float32x4 b, Float32x4 c) //Constructor
+  Float32x4x3() {}                                   //Empty constructor
+  Float32x4x3(Float32x4 a, Float32x4 b, Float32x4 c) //Constructor
     : x(a), y(b), z(c) {}
-  vector4(float a, float b, float c)             //Constructor
-    : vector4(make_Float32x4(a), make_Float32x4(b), make_Float32x4(c)) {}
-  vector4(const vector vec)
-    : vector4(vec.x(), vec.y(), vec.z()) {}
-  vector4(const vector* vec)
-    : vector4(
+  Float32x4x3(float a, float b, float c)             //Constructor
+    : Float32x4x3(make_Float32x4(a), make_Float32x4(b), make_Float32x4(c)) {}
+  Float32x4x3(const vector vec)
+    : Float32x4x3(vec.x(), vec.y(), vec.z()) {}
+  Float32x4x3(const vector* vec)
+    : Float32x4x3(
         make_Float32x4(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
       , make_Float32x4(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
       , make_Float32x4(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()))
   {}
 
-  vector4 operator+(vector4 r) const {           //Vector add
-    return vector4(x+r.x, y+r.y, z+r.z);
+  Float32x4x3 operator+(Float32x4x3 r) const {           //Vector add
+    return Float32x4x3(x+r.x, y+r.y, z+r.z);
   }
-  vector4 operator*(Float32x4 r) const {         //Vector multiply
-    return vector4(x*r, y*r, z*r);
+  Float32x4x3 operator*(Float32x4 r) const {         //Vector multiply
+    return Float32x4x3(x*r, y*r, z*r);
   }
-  vector4 operator*(float r) const {             //Vector scaling
+  Float32x4x3 operator*(float r) const {             //Vector scaling
     return *this * make_Float32x4(r);
   }
-  Float32x4 operator%(vector4 r) const {         //Vector dot product
+  Float32x4 operator%(Float32x4x3 r) const {         //Vector dot product
     return x*r.x + y*r.y + z*r.z;
   }
-  vector4 operator^(vector4 r) const {           //Cross-product
-    return vector4(y*r.z-z*r.y, z*r.x-x*r.z, x*r.y-y*r.x);
+  Float32x4x3 operator^(Float32x4x3 r) const {           //Cross-product
+    return Float32x4x3(y*r.z-z*r.y, z*r.x-x*r.z, x*r.y-y*r.x);
   }
-  vector4 operator!() const { // Used later for normalizing the vector
+  Float32x4x3 operator!() const { // Used later for normalizing the vector
     return *this * (rsqrt(*this%*this));
   }
 
@@ -272,41 +272,41 @@ Float32x8 operator-(Float32x8 lhs, float rhs) {
 }
 
 
-struct vector8 {
+struct Float32x8x3 {
   enum { nVector = 8 };
 
   Float32x8 x, y, z;  // Vector has 8 * three float attributes.
 
-  vector8() {}                                   //Empty constructor
-  vector8(Float32x8 a, Float32x8 b, Float32x8 c) //Constructor
+  Float32x8x3() {}                                   //Empty constructor
+  Float32x8x3(Float32x8 a, Float32x8 b, Float32x8 c) //Constructor
     : x(a), y(b), z(c) {}
-  vector8(float a, float b, float c)             //Constructor
-    : vector8(make_Float32x8(a), make_Float32x8(b), make_Float32x8(c)) {}
-  vector8(const vector vec)
-    : vector8(vec.x(), vec.y(), vec.z()) {}
-  vector8(const vector* vec)
-    : vector8(
+  Float32x8x3(float a, float b, float c)             //Constructor
+    : Float32x8x3(make_Float32x8(a), make_Float32x8(b), make_Float32x8(c)) {}
+  Float32x8x3(const vector vec)
+    : Float32x8x3(vec.x(), vec.y(), vec.z()) {}
+  Float32x8x3(const vector* vec)
+    : Float32x8x3(
         make_Float32x8(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x())
       , make_Float32x8(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y())
       , make_Float32x8(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z()))
     {}
 
-  vector8 operator+(vector8 r) const {           //Vector add
-    return vector8(x+r.x, y+r.y, z+r.z);
+  Float32x8x3 operator+(Float32x8x3 r) const {           //Vector add
+    return Float32x8x3(x+r.x, y+r.y, z+r.z);
   }
-  vector8 operator*(Float32x8 r) const {         //Vector multiply
-    return vector8(x*r, y*r, z*r);
+  Float32x8x3 operator*(Float32x8 r) const {         //Vector multiply
+    return Float32x8x3(x*r, y*r, z*r);
   }
-  vector8 operator*(float r) const {             //Vector scaling
+  Float32x8x3 operator*(float r) const {             //Vector scaling
     return *this * make_Float32x8(r);
   }
-  Float32x8 operator%(vector8 r) const {         //Vector dot product
+  Float32x8 operator%(Float32x8x3 r) const {         //Vector dot product
     return x*r.x + y*r.y + z*r.z;
   }
-  vector8 operator^(vector8 r) const {           //Cross-product
-    return vector8(y*r.z-z*r.y, z*r.x-x*r.z, x*r.y-y*r.x);
+  Float32x8x3 operator^(Float32x8x3 r) const {           //Cross-product
+    return Float32x8x3(y*r.z-z*r.y, z*r.x-x*r.z, x*r.y-y*r.x);
   }
-  vector8 operator!() const { // Used later for normalizing the vector
+  Float32x8x3 operator!() const { // Used later for normalizing the vector
     return *this * (rsqrt(*this%*this));
   }
 
@@ -330,12 +330,6 @@ typedef std::chrono::high_resolution_clock Clock;
 typedef std::chrono::duration<double> ClockSec;
 typedef std::vector<vector> Objects;
 typedef std::vector<std::string> Art;
-#if defined(RAYS_CPP_SSE)
-typedef std::vector<vector4> Objects4;
-#endif
-#if defined(RAYS_CPP_AVX)
-typedef std::vector<vector8> Objects8;
-#endif
 
 struct Result {
   Result(size_t times)
@@ -475,27 +469,27 @@ public:
 #if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 
 #if defined(RAYS_CPP_AVX)
-  typedef Objects8 ObjectsN;
+  typedef std::vector<Float32x8x3> ObjectsN;
 #elif defined(RAYS_CPP_SSE)
-  typedef Objects4 ObjectsN;
+  typedef std::vector<Float32x4x3> ObjectsN;
 #endif
+
   static ObjectsN makeObjectsN(const Objects& objectsSrc) {
     ObjectsN os;
-    typedef ObjectsN::value_type V; // vector4 or vector8
+    typedef ObjectsN::value_type V; // Float32x4x3 or Float32x8x3
     const auto nVector = V::nVector; // 4 or 8
-  
+
     auto o = objectsSrc;
     while(o.size() % nVector != 0) {
       o.push_back(o.back());
     }
-  
+
     for(size_t i = 0; i < o.size(); i += nVector) {
       os.emplace_back(V(o.data() + i));
     }
     return os;
   }
 
-typedef std::vector<vector8> Objects8;
   ObjectsN objectsN;
 #endif
 };
@@ -544,8 +538,8 @@ TracerResult tracer(const Scene& scene, vector o, vector d) {
     int idx = -1;
 
     const auto& objs = scene.objectsN;
-    typedef std::remove_reference<decltype(objs)>::type Vs; // Objects4 or Objects8
-    typedef Vs::value_type V; // vector4 or vector8
+    typedef std::remove_reference<decltype(objs)>::type Vs;
+    typedef Vs::value_type V; // Float32x4x3 or Float32x8x3
     const auto nVector = V::nVector; // 4 or 8
     const auto o8 = V(o);
     const auto d8 = V(d);
