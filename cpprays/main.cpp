@@ -104,17 +104,17 @@ bool is_true(vbool b, int index) {
 
 
 #if defined(RAYS_CPP_SSE)
-typedef __m128 v4f;
+typedef __m128 Float32x4;
 
-v4f make_v4f(float f) {
+Float32x4 make_Float32x4(float f) {
   return _mm_set1_ps(f);
 }
 
-v4f make_v4f(float f0, float f1, float f2, float f3) {
+Float32x4 make_Float32x4(float f0, float f1, float f2, float f3) {
   return _mm_set_ps(f0, f1, f2, f3);
 }
 
-float get(v4f v, int index) {
+float get(Float32x4 v, int index) {
 #if defined(_MSC_VER)
   return v.m128_f32[index];
 #else
@@ -122,32 +122,32 @@ float get(v4f v, int index) {
 #endif
 }
 
-v4f sqrt(v4f v) {
+Float32x4 sqrt(Float32x4 v) {
   return _mm_sqrt_ps(v);
 }
 
-v4f rsqrt(v4f v) {
+Float32x4 rsqrt(Float32x4 v) {
   return _mm_rsqrt_ps(v);
 }
 
-vbool compare_gt(v4f lhs, v4f rhs) {
+vbool compare_gt(Float32x4 lhs, Float32x4 rhs) {
   return _mm_movemask_ps(_mm_cmp_ps(lhs, rhs, _CMP_GT_OQ));
 }
 
 #if defined(_MSC_VER)
-v4f operator+(v4f lhs, v4f rhs) {
+Float32x4 operator+(Float32x4 lhs, Float32x4 rhs) {
   return _mm_add_ps(lhs, rhs);
 }
 
-v4f operator-(v4f lhs, v4f rhs) {
+Float32x4 operator-(Float32x4 lhs, Float32x4 rhs) {
   return _mm_sub_ps(lhs, rhs);
 }
 
-v4f operator*(v4f lhs, v4f rhs) {
+Float32x4 operator*(Float32x4 lhs, Float32x4 rhs) {
   return _mm_mul_ps(lhs, rhs);
 }
 
-v4f operator-(v4f v) {
+Float32x4 operator-(Float32x4 v) {
   // Flipping sign on packed SSE floats
   // http://stackoverflow.com/questions/3361132/flipping-sign-on-packed-sse-floats
   // http://stackoverflow.com/a/3528787/2132223
@@ -155,40 +155,40 @@ v4f operator-(v4f v) {
 }
 #endif
 
-v4f operator-(v4f lhs, float rhs) {
-  return lhs - make_v4f(rhs);
+Float32x4 operator-(Float32x4 lhs, float rhs) {
+  return lhs - make_Float32x4(rhs);
 }
 
 
 struct vector4 {
   enum { nVector = 4 };
 
-  v4f x,y,z;  // Vector has 4 * three float attributes.
+  Float32x4 x,y,z;  // Vector has 4 * three float attributes.
   inline vector4 operator+(vector4 r) const {return vector4(x+r.x,y+r.y,z+r.z);} //Vector add
-  inline vector4 operator*(v4f r) const {return vector4(x*r,y*r,z*r);}       //Vector scaling
-  inline vector4 operator*(float r) const {v4f v=make_v4f(r); return vector4(x*v,y*v,z*v);}       //Vector scaling
-  inline v4f operator%(vector4 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
+  inline vector4 operator*(Float32x4 r) const {return vector4(x*r,y*r,z*r);}       //Vector scaling
+  inline vector4 operator*(float r) const {Float32x4 v=make_Float32x4(r); return vector4(x*v,y*v,z*v);}       //Vector scaling
+  inline Float32x4 operator%(vector4 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
   inline vector4 operator^(vector4 r) const {return vector4(y*r.z-z*r.y,z*r.x-x*r.z,x*r.y-y*r.x);} //Cross-product
   vector4(){}                                  //Empty constructor
-  inline vector4(v4f a, v4f b,v4f c){x=a;y=b;z=c;}            //Constructor
-  inline vector4(float a, float b, float c){x=make_v4f(a);y=make_v4f(b);z=make_v4f(c);}            //Constructor
+  inline vector4(Float32x4 a, Float32x4 b,Float32x4 c){x=a;y=b;z=c;}            //Constructor
+  inline vector4(float a, float b, float c){x=make_Float32x4(a);y=make_Float32x4(b);z=make_Float32x4(c);}            //Constructor
   inline vector4 operator!() const {return *this*(rsqrt(*this%*this));} // Used later for normalizing the vector
   vector4(const vector* vec) {
-    x = make_v4f(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x());
-    y = make_v4f(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y());
-    z = make_v4f(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z());
+    x = make_Float32x4(vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x());
+    y = make_Float32x4(vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y());
+    z = make_Float32x4(vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z());
   }
   vector4(const vector vec) {
-    x = make_v4f(vec.x());
-    y = make_v4f(vec.y());
-    z = make_v4f(vec.z());
+    x = make_Float32x4(vec.x());
+    y = make_Float32x4(vec.y());
+    z = make_Float32x4(vec.z());
   }
 
   vector getVector(int index) const {
 #if defined(_MSC_VER)
     return vector(get(x, index), get(y, index), get(z, index));
 #else
-    // FIXME (gcc 4.8.1) : calling get(v4f, int) cause segfault
+    // FIXME (gcc 4.8.1) : calling get(Float32x4, int) cause segfault
     return vector(
         reinterpret_cast<const float*>(&x)[index]
       , reinterpret_cast<const float*>(&y)[index]
@@ -202,17 +202,17 @@ struct vector4 {
 
 #if defined(RAYS_CPP_AVX)
 
-typedef __m256 v8f;
+typedef __m256 Float32x8;
 
-v8f make_v8f(float f) {
+Float32x8 make_Float32x8(float f) {
   return _mm256_set1_ps(f);
 }
 
-v8f make_v8f(float f0, float f1, float f2, float f3, float f4, float f5, float f6, float f7) {
+Float32x8 make_Float32x8(float f0, float f1, float f2, float f3, float f4, float f5, float f6, float f7) {
   return _mm256_set_ps(f0, f1, f2, f3, f4, f5, f6, f7);
 }
 
-float get(v8f v, int index) {
+float get(Float32x8 v, int index) {
 #if defined(_MSC_VER)
   return v.m256_f32[index];
 #else
@@ -220,32 +220,32 @@ float get(v8f v, int index) {
 #endif
 }
 
-v8f sqrt(v8f v) {
+Float32x8 sqrt(Float32x8 v) {
   return _mm256_sqrt_ps(v);
 }
 
-v8f rsqrt(v8f v) {
+Float32x8 rsqrt(Float32x8 v) {
   return _mm256_rsqrt_ps(v);
 }
 
-vbool compare_gt(v8f lhs, v8f rhs) {
+vbool compare_gt(Float32x8 lhs, Float32x8 rhs) {
   return _mm256_movemask_ps(_mm256_cmp_ps(lhs, rhs, _CMP_GT_OQ));
 }
 
 #if defined(_MSC_VER)
-v8f operator+(v8f lhs, v8f rhs) {
+Float32x8 operator+(Float32x8 lhs, Float32x8 rhs) {
   return _mm256_add_ps(lhs, rhs);
 }
 
-v8f operator-(v8f lhs, v8f rhs) {
+Float32x8 operator-(Float32x8 lhs, Float32x8 rhs) {
   return _mm256_sub_ps(lhs, rhs);
 }
 
-v8f operator*(v8f lhs, v8f rhs) {
+Float32x8 operator*(Float32x8 lhs, Float32x8 rhs) {
   return _mm256_mul_ps(lhs, rhs);
 }
 
-v8f operator-(v8f v) {
+Float32x8 operator-(Float32x8 v) {
   // Flipping sign on packed SSE floats
   // http://stackoverflow.com/questions/3361132/flipping-sign-on-packed-sse-floats
   // http://stackoverflow.com/a/3528787/2132223
@@ -253,40 +253,40 @@ v8f operator-(v8f v) {
 }
 #endif
 
-v8f operator-(v8f lhs, float rhs) {
-  return lhs - make_v8f(rhs);
+Float32x8 operator-(Float32x8 lhs, float rhs) {
+  return lhs - make_Float32x8(rhs);
 }
 
 
 struct vector8 {
   enum { nVector = 8 };
 
-  v8f x,y,z;  // Vector has 4 * three float attributes.
+  Float32x8 x,y,z;  // Vector has 4 * three float attributes.
   inline vector8 operator+(vector8 r) const {return vector8(x+r.x,y+r.y,z+r.z);} //Vector add
-  inline vector8 operator*(v8f r) const {return vector8(x*r,y*r,z*r);}       //Vector scaling
-  inline vector8 operator*(float r) const {v8f v=make_v8f(r); return vector8(x*v,y*v,z*v);}       //Vector scaling
-  inline v8f operator%(vector8 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
+  inline vector8 operator*(Float32x8 r) const {return vector8(x*r,y*r,z*r);}       //Vector scaling
+  inline vector8 operator*(float r) const {Float32x8 v=make_Float32x8(r); return vector8(x*v,y*v,z*v);}       //Vector scaling
+  inline Float32x8 operator%(vector8 r) const {return x*r.x+y*r.y+z*r.z;}    //Vector dot product
   inline vector8 operator^(vector8 r) const {return vector8(y*r.z-z*r.y,z*r.x-x*r.z,x*r.y-y*r.x);} //Cross-product
   vector8(){}                                  //Empty constructor
-  inline vector8(v8f a, v8f b,v8f c){x=a;y=b;z=c;}            //Constructor
-  inline vector8(float a, float b, float c){x=make_v8f(a);y=make_v8f(b);z=make_v8f(c);}            //Constructor
+  inline vector8(Float32x8 a, Float32x8 b,Float32x8 c){x=a;y=b;z=c;}            //Constructor
+  inline vector8(float a, float b, float c){x=make_Float32x8(a);y=make_Float32x8(b);z=make_Float32x8(c);}            //Constructor
   inline vector8 operator!() const {return *this*(rsqrt(*this%*this));} // Used later for normalizing the vector
   vector8(const vector* vec) {
-    x = make_v8f(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x());
-    y = make_v8f(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y());
-    z = make_v8f(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z());
+    x = make_Float32x8(vec[7].x(), vec[6].x(), vec[5].x(), vec[4].x(), vec[3].x(), vec[2].x(), vec[1].x(), vec[0].x());
+    y = make_Float32x8(vec[7].y(), vec[6].y(), vec[5].y(), vec[4].y(), vec[3].y(), vec[2].y(), vec[1].y(), vec[0].y());
+    z = make_Float32x8(vec[7].z(), vec[6].z(), vec[5].z(), vec[4].z(), vec[3].z(), vec[2].z(), vec[1].z(), vec[0].z());
   }
   vector8(const vector vec) {
-    x = make_v8f(vec.x());
-    y = make_v8f(vec.y());
-    z = make_v8f(vec.z());
+    x = make_Float32x8(vec.x());
+    y = make_Float32x8(vec.y());
+    z = make_Float32x8(vec.z());
   }
 
   vector getVector(int index) const {
 #if defined(_MSC_VER)
     return vector(get(x, index), get(y, index), get(z, index));
 #else
-    // FIXME (gcc 4.8.1) : calling get(v8f, int) cause segfault
+    // FIXME (gcc 4.8.1) : calling get(Float32x8, int) cause segfault
     return vector(
         reinterpret_cast<const float*>(&x)[index]
       , reinterpret_cast<const float*>(&y)[index]
