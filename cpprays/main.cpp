@@ -461,58 +461,42 @@ Objects makeObjects(const Art& art) {
   return o;
 }
 
-#if defined(RAYS_CPP_SSE)
-Objects4 makeObjects4(const Objects& objectsSrc) {
-  Objects4 o4;
-  const auto nVector = decltype(o4)::value_type::nVector;
-
-  auto o = objectsSrc;
-  while(o.size() % nVector != 0) {
-    o.push_back(o.back());
-  }
-
-  for(size_t i = 0; i < o.size(); i += nVector) {
-    o4.emplace_back(vector4(o.data() + i));
-  }
-  return o4;
-}
-#endif
-
-#if defined(RAYS_CPP_AVX)
-Objects8 makeObjects8(const Objects& objectsSrc) {
-  Objects8 o8;
-  const auto nVector = decltype(o8)::value_type::nVector;
-
-  auto o = objectsSrc;
-  while(o.size() % nVector != 0) {
-    o.push_back(o.back());
-  }
-
-  for(size_t i = 0; i < o.size(); i += nVector) {
-    o8.emplace_back(vector8(o.data() + i));
-  }
-  return o8;
-}
-#endif
-
 class Scene {
 public:
   Scene(const Art& art)
     : objects(makeObjects(art))
-#if defined(RAYS_CPP_SSE)
-    , objects4(makeObjects4(objects))
-#endif
-#if defined(RAYS_CPP_AVX)
-    , objects8(makeObjects8(objects))
+#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+    , objectsN(makeObjectsN(objects))
 #endif
     {}
 
   Objects objects;
-#if defined(RAYS_CPP_SSE)
-  Objects4 objects4;
-#endif
+
+#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+
 #if defined(RAYS_CPP_AVX)
-  Objects8 objects8;
+  typedef Objects8 ObjectsN;
+#elif defined(RAYS_CPP_SSE)
+  typedef Objects4 ObjectsN;
+#endif
+  static ObjectsN makeObjectsN(const Objects& objectsSrc) {
+    ObjectsN os;
+    typedef ObjectsN::value_type V; // vector4 or vector8
+    const auto nVector = V::nVector; // 4 or 8
+  
+    auto o = objectsSrc;
+    while(o.size() % nVector != 0) {
+      o.push_back(o.back());
+    }
+  
+    for(size_t i = 0; i < o.size(); i += nVector) {
+      os.emplace_back(V(o.data() + i));
+    }
+    return os;
+  }
+
+typedef std::vector<vector8> Objects8;
+  ObjectsN objectsN;
 #endif
 };
 
@@ -555,55 +539,16 @@ TracerResult tracer(const Scene& scene, vector o, vector d) {
     tr.m = Status::kMissDownward;
   }
 
-#if defined(RAYS_CPP_AVX)
+#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
   {
     int idx = -1;
 
-    const auto& objs = scene.objects8;
-    const auto nVector = vector8::nVector;
-    const auto o8 = vector8(o);
-    const auto d8 = vector8(d);
-    for(const auto& obj : objs) {
-      // There is a sphere but does the ray hits it ?
-      const auto p = o8 + obj;
-      const auto b = p % d8;
-      const auto c = p % p - 1.0f;
-      const auto b2 = b * b;
-      const auto mask = compare_gt(b2, c);
-      if (is_any(mask)) { // early bailout if nothing hit
-        const auto q = b2 - c;
-        const auto s_ = -b - sqrt(q);
-        // Does the ray hit the sphere ?
-
-        for(int j = 0; j < nVector; j++) {
-          if(is_true(mask, j)) {
-            const auto s = get(s_, j);
-            if(s < tr.t && s > .01f) {
-              const auto i = static_cast<int>(&obj - objs.data());
-              idx = i * nVector + j;
-              tr.t = s;
-            }
-          }
-        }
-      }
-    }
-
-    if (idx != -1) {
-      const auto i = idx / nVector;
-      const auto j = idx % nVector;
-      const auto p = o + objs[i].getVector(j);
-      tr.n = !(p + d * tr.t);
-      tr.m = Status::kHit;
-    }
-  }
-#elif defined(RAYS_CPP_SSE)
-  {
-    int idx = -1;
-
-    const auto& objs = scene.objects4;
-    const auto nVector = vector4::nVector;
-    const auto o8 = vector4(o);
-    const auto d8 = vector4(d);
+    const auto& objs = scene.objectsN;
+    typedef std::remove_reference<decltype(objs)>::type Vs; // Objects4 or Objects8
+    typedef Vs::value_type V; // vector4 or vector8
+    const auto nVector = V::nVector; // 4 or 8
+    const auto o8 = V(o);
+    const auto d8 = V(d);
     for(const auto& obj : objs) {
       // There is a sphere but does the ray hits it ?
       const auto p = o8 + obj;
