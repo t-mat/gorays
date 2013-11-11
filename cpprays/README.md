@@ -27,9 +27,11 @@
     bin\cpprays.exe
 
 SSE
+
     cl /nologo /EHsc /Ox /fp:fast cpprays\main.cpp /Fo:bin\cpprays_sse.obj /Fe:bin\cpprays_sse.exe /DRAYS_CPP_SSE
     bin\cpprays_sse.exe
 
 AVX
+
     cl /nologo /EHsc /Ox /fp:fast cpprays\main.cpp /Fo:bin\cpprays_avx.obj /Fe:bin\cpprays_avx.exe /DRAYS_CPP_AVX /arch:AVX
     bin\cpprays_avx.exe
