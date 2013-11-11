@@ -13,6 +13,8 @@
 #include "Result.hpp"
 
 #if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+#include "VectorFloat32xNx3.hpp"
+
 typedef int vbool;
 
 bool is_any(vbool b) {
@@ -27,14 +29,14 @@ bool is_true(vbool b, int index) {
 #if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 #include <smmintrin.h>
 #include "VectorFloat32x4Sse.hpp"
-#include "VectorFloat32x4x3.hpp"
+typedef Float32xNx3<Float32x4, 4> Float32x4x3;
 #define RAYS_CPP_HAVE_FLOAT32X4
 #endif
 
 #if defined(RAYS_CPP_AVX)
 #include <immintrin.h>
 #include "VectorFloat32x8Avx.hpp"
-#include "VectorFloat32x8x3.hpp"
+typedef Float32xNx3<Float32x8, 8> Float32x8x3;
 #define RAYS_CPP_HAVE_FLOAT32X8
 #endif
 
@@ -54,7 +56,7 @@ public:
     return vector(xyzw + r.xyzw);
   }
   vector operator*(const float r) const {
-    return vector(xyzw * makeFloat32x4(r));
+    return vector(xyzw * make<Float32x4>(r));
   }
   float operator%(const vector r) const {
     return dot3(xyzw, r.xyzw);
@@ -64,10 +66,6 @@ public:
   }
   vector operator!() const {
     return *this * (1.f / sqrtf(*this % *this));
-  }
-
-  template<class T> static T make(const vector vec) {
-    return T(vec.x(), vec.y(), vec.z());
   }
 
   template<class T> static vector getVector(const T& t, int index) {
@@ -85,6 +83,10 @@ public:
 
   Float32x4 xyzw;
 };
+
+template<class T> static T make(const vector vec) {
+  return T(vec.x(), vec.y(), vec.z());
+}
 
 // TODO Implement more generic way
 template<class T> T make(const vector* vec);
@@ -268,8 +270,8 @@ TracerResult tracer(const Scene& scene, vector o, vector d) {
     typedef std::remove_reference<decltype(objs)>::type Vs;
     typedef Vs::value_type V; // Float32x4x3 or Float32x8x3
     const auto nVector = V::nVector; // 4 or 8
-    const auto o8 = vector::make<V>(o);
-    const auto d8 = vector::make<V>(d);
+    const auto o8 = make<V>(o);
+    const auto d8 = make<V>(d);
     for(const auto& obj : objs) {
       // There is a sphere but does the ray hits it ?
       const auto p = o8 + obj;

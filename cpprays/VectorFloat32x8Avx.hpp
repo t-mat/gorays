@@ -3,7 +3,7 @@
 
 typedef __m256 Float32x8;
 
-Float32x8 makeFloat32x8(float f) {
+template<> Float32x8 make<Float32x8>(float f) {
   return _mm256_set1_ps(f);
 }
 
@@ -52,7 +52,7 @@ Float32x8 operator-(Float32x8 v) {
 }
 
 Float32x8 operator-(Float32x8 lhs, float rhs) {
-  return lhs - makeFloat32x8(rhs);
+  return lhs - make<Float32x8>(rhs);
 }
 #endif
 

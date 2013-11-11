@@ -9,7 +9,7 @@ inline float get(Float32x4 v, int index) {
   return f[index];
 }
 
-inline Float32x4 makeFloat32x4(float f) {
+template<> Float32x4 make<Float32x4>(float f) {
   return _mm_set1_ps(f);
 }
 
@@ -50,7 +50,7 @@ inline Float32x4 operator-(Float32x4 v) {
 }
 
 inline Float32x4 operator-(Float32x4 lhs, float rhs) {
-  return lhs - makeFloat32x4(rhs);
+  return lhs - make<Float32x4>(rhs);
 }
 #endif
 
