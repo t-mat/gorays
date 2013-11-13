@@ -8,11 +8,17 @@
 #include <chrono>
 #include <map>
 #include <numeric>
+
+#if (defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)) && (!defined(RAYS_CPP_VECTORIZE))
+#define RAYS_CPP_VECTORIZE
+#endif
+
 #include "PixelImage.hpp"
 #include "ArgumentParser.hpp"
 #include "Result.hpp"
 
-#if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
+
+#if defined(RAYS_CPP_VECTORIZE)
 #include "VectorFloat32xNx3.hpp"
 
 typedef int vbool;
@@ -24,21 +30,31 @@ bool is_any(vbool b) {
 bool is_true(vbool b, int index) {
   return 0 != (b & (1 << index));
 }
-#endif
 
 #if defined(RAYS_CPP_SSE) || defined(RAYS_CPP_AVX)
 #include <smmintrin.h>
 #include "VectorFloat32x4Sse.hpp"
-typedef Float32xNx3<Float32x4, 4> Float32x4x3;
-#define RAYS_CPP_HAVE_FLOAT32X4
+#else
+#include "VectorFloat32x4.hpp"
 #endif
+
+#define RAYS_CPP_HAVE_FLOAT32X4
+typedef Float32xNx3<Float32x4, 4> Float32x4x3;
+
 
 #if defined(RAYS_CPP_AVX)
 #include <immintrin.h>
 #include "VectorFloat32x8Avx.hpp"
 typedef Float32xNx3<Float32x8, 8> Float32x8x3;
 #define RAYS_CPP_HAVE_FLOAT32X8
+#elif defined(RAYS_CPP_VECTORIZE8)
+#include "VectorFloat32x8.hpp"
+typedef Float32xNx3<Float32x8, 8> Float32x8x3;
+#define RAYS_CPP_HAVE_FLOAT32X8
 #endif
+
+#endif
+
 
 #if defined(RAYS_CPP_HAVE_FLOAT32X4)
 
@@ -180,14 +196,14 @@ class Scene {
 public:
   Scene(const Art& art)
     : objects(makeObjects(art))
-#if defined(RAYS_CPP_HAVE_FLOAT32X4) || defined(RAYS_CPP_HAVE_FLOAT32X8)
+#if defined(RAYS_CPP_VECTORIZE)
     , objectsN(makeObjectsN(objects))
 #endif
     {}
 
   Objects objects;
 
-#if defined(RAYS_CPP_HAVE_FLOAT32X4) || defined(RAYS_CPP_HAVE_FLOAT32X8)
+#if defined(RAYS_CPP_VECTORIZE)
 
 #if defined(RAYS_CPP_HAVE_FLOAT32X8)
   typedef std::vector<Float32x8x3> ObjectsN;
